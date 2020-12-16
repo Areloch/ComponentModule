@@ -56,11 +56,9 @@ MeshComponent::MeshComponent() : renderComponent(), mShape(nullptr)
 
    mNetworked = true;
 
-   mShapeName = StringTable->EmptyString();
-   mShapeAsset = StringTable->EmptyString();
+   mShapeInstance = nullptr;
 
-   mMeshAsset = StringTable->EmptyString();
-   mMeshAssetId = StringTable->EmptyString();
+   initShapeAsset(Mesh);
 }
 
 MeshComponent::~MeshComponent()
@@ -87,6 +85,8 @@ void MeshComponent::onComponentAdd()
 
   // if (mInterfaceData != nullptr)
   //   mInterfaceData->mIsClient = isClientObject();
+
+   bindShapeAsset(Mesh);
 
    //get the default shape, if any
    updateShape();
@@ -115,54 +115,12 @@ void MeshComponent::initPersistFields()
 
    //create a hook to our internal variables
    addGroup("Model");
-   addProtectedField("MeshAsset", TypeShapeAssetPtr, Offset(mShapeAsset, MeshComponent), &_setMesh, &defaultProtectedGetFn, &writeShape,
-      "The asset Id used for the mesh.", AbstractClassRep::FieldFlags::FIELD_ComponentInspectors);
+   scriptBindShapeAsset(Mesh, MeshComponent, "Base Shape Asset Files");
+
+   //addProtectedField("MeshAsset", TypeShapeAssetPtr, Offset(mShapeAsset, MeshComponent), &_setMesh, &defaultProtectedGetFn, &writeShape,
+   //   "The asset Id used for the mesh.", AbstractClassRep::FieldFlags::FIELD_ComponentInspectors);
    endGroup("Model");
 }
-
-bool MeshComponent::_setMesh(void *object, const char *index, const char *data)
-{
-   MeshComponent *rbI = static_cast<MeshComponent*>(object);
-   
-   // Sanity!
-   AssertFatal(data != NULL, "Cannot use a NULL asset Id.");
-
-   return rbI->setMeshAsset(data);
-}
-
-bool MeshComponent::_setShape( void *object, const char *index, const char *data )
-{
-   MeshComponent *rbI = static_cast<MeshComponent*>(object);
-   rbI->mShapeName = StringTable->insert(data);
-   rbI->updateShape(); //make sure we force the update to resize the owner bounds
-   rbI->setMaskBits(ShapeMask);
-
-   return true;
-}
-
-bool MeshComponent::setMeshAsset(const char* assetName)
-{
-   // Fetch the asset Id.
-   mMeshAssetId = StringTable->insert(assetName);
-
-   mMeshAsset = mMeshAssetId;
-
-   if (mMeshAsset.isNull())
-   {
-      Con::errorf("[MeshComponent] Failed to load mesh asset.");
-      return false;
-   }
-
-   mMeshAsset->onShapeChanged.notify(this, &MeshComponent::_shapeAssetUpdated);
-
-   mShapeName = mMeshAssetId;
-   mShapeAsset = mShapeName;
-   updateShape(); //make sure we force the update to resize the owner bounds
-   setMaskBits(ShapeMask);
-
-   return true;
-}
-
 void MeshComponent::_shapeAssetUpdated(ShapeAsset* asset)
 {
    updateShape();
@@ -170,90 +128,94 @@ void MeshComponent::_shapeAssetUpdated(ShapeAsset* asset)
 
 void MeshComponent::updateShape()
 {
-   //if ((mShapeName && mShapeName[0] != '\0') || (mShapeAsset && mShapeAsset[0] != '\0'))
-   if ((mShapeName && mShapeName[0] != '\0') || (mMeshAssetId && mMeshAssetId[0] != '\0'))
+   if (mMeshAsset.isNull())
+      return;
+
+   if (mShapeInstance)
+      SAFE_DELETE(mShapeInstance);
+   mShape = NULL;
+
+   // Attempt to get the resource from the ResourceManager
+   mShape = mMeshAsset->getShapeResource();
+
+   if (!mShape)
    {
-      if (mMeshAsset == NULL)
-         return;
-
-      mShape = mMeshAsset->getShape();
-
-      if (!mMeshAsset->getShape())
-         return;
-
-      setupShape();
-
-      //Do this on both the server and client
-      S32 materialCount = mMeshAsset->getShape()->materialList->getMaterialNameList().size(); //mMeshAsset->getMaterialCount();
-
-      if (isServerObject())
-      {
-         //we need to update the editor
-         /*for (U32 i = 0; i < mFields.size(); i++)
-         {
-            //find any with the materialslot title and clear them out
-            if (FindMatch::isMatch("MaterialSlot*", mFields[i].mFieldName, false))
-            {
-               setDataField(mFields[i].mFieldName, NULL, "");
-               mFields.erase(i);
-               continue;
-            }
-         }
-
-         //next, get a listing of our materials in the shape, and build our field list for them
-         char matFieldName[128];
-
-         if (materialCount > 0)
-            mComponentGroup = StringTable->insert("Materials");
-
-         for (U32 i = 0; i < materialCount; i++)
-         {
-            StringTableEntry materialname = StringTable->insert(mMeshAsset->getShape()->materialList->getMaterialName(i).c_str());
-
-            //Iterate through our assetList to find the compliant entry in our matList
-            for (U32 m = 0; m < mMeshAsset->getMaterialCount(); m++)
-            {
-               AssetPtr<MaterialAsset> matAsset = mMeshAsset->getMaterialAsset(m);
-
-               if (matAsset->getMaterialDefinitionName() == materialname)
-               {
-                  dSprintf(matFieldName, 128, "MaterialSlot%d", i);
-
-                  addComponentField(matFieldName, "A material used in the shape file", "Material", matAsset->getAssetId(), "");
-                  break;
-               }
-            }
-         }
-
-         if (materialCount > 0)
-            mComponentGroup = "";*/
-      }
-
-      if (mOwner != NULL)
-      {
-         Point3F min, max, pos;
-         pos = mOwner->getPosition();
-
-         mOwner->getWorldToObj().mulP(pos);
-
-         min = mMeshAsset->getShape()->mBounds.minExtents;
-         max = mMeshAsset->getShape()->mBounds.maxExtents;
-
-         mBounds.set(min, max);
-         mScale = mOwner->getScale();
-         mTransform = mOwner->getRenderTransform();
-
-         mOwner->setObjectBox(Box3F(min, max));
-
-         mOwner->resetWorldBox();
-
-         if (mOwner->getSceneManager() != NULL)
-            mOwner->getSceneManager()->notifyObjectDirty(mOwner);
-      }
-
-      //finally, notify that our shape was changed
-      onShapeInstanceChanged.trigger(this);
+      Con::errorf("MeshComponent::updateShape() - Unable to load shape: %s", mMeshAsset.getAssetId());
+      return;
    }
+
+   setupShape();
+
+   //Do this on both the server and client
+   S32 materialCount = mMeshAsset->getShape()->materialList->getMaterialNameList().size(); //mMeshAsset->getMaterialCount();
+
+   if (isServerObject())
+   {
+      //we need to update the editor
+      /*for (U32 i = 0; i < mFields.size(); i++)
+      {
+         //find any with the materialslot title and clear them out
+         if (FindMatch::isMatch("MaterialSlot*", mFields[i].mFieldName, false))
+         {
+            setDataField(mFields[i].mFieldName, NULL, "");
+            mFields.erase(i);
+            continue;
+         }
+      }
+
+      //next, get a listing of our materials in the shape, and build our field list for them
+      char matFieldName[128];
+
+      if (materialCount > 0)
+         mComponentGroup = StringTable->insert("Materials");
+
+      for (U32 i = 0; i < materialCount; i++)
+      {
+         StringTableEntry materialname = StringTable->insert(mMeshAsset->getShape()->materialList->getMaterialName(i).c_str());
+
+         //Iterate through our assetList to find the compliant entry in our matList
+         for (U32 m = 0; m < mMeshAsset->getMaterialCount(); m++)
+         {
+            AssetPtr<MaterialAsset> matAsset = mMeshAsset->getMaterialAsset(m);
+
+            if (matAsset->getMaterialDefinitionName() == materialname)
+            {
+               dSprintf(matFieldName, 128, "MaterialSlot%d", i);
+
+               addComponentField(matFieldName, "A material used in the shape file", "Material", matAsset->getAssetId(), "");
+               break;
+            }
+         }
+      }
+
+      if (materialCount > 0)
+         mComponentGroup = "";*/
+   }
+
+   if (mOwner != NULL)
+   {
+      Point3F min, max, pos;
+      pos = mOwner->getPosition();
+
+      mOwner->getWorldToObj().mulP(pos);
+
+      min = mMeshAsset->getShape()->mBounds.minExtents;
+      max = mMeshAsset->getShape()->mBounds.maxExtents;
+
+      mBounds.set(min, max);
+      mScale = mOwner->getScale();
+      mTransform = mOwner->getRenderTransform();
+
+      mOwner->setObjectBox(Box3F(min, max));
+
+      mOwner->resetWorldBox();
+
+      if (mOwner->getSceneManager() != NULL)
+         mOwner->getSceneManager()->notifyObjectDirty(mOwner);
+   }
+
+   //finally, notify that our shape was changed
+   onShapeInstanceChanged.trigger(this);
 }
 
 void MeshComponent::setupShape()
@@ -282,6 +244,14 @@ void MeshComponent::_onResourceChanged( const Torque::Path &path )
 void MeshComponent::inspectPostApply()
 {
    Parent::inspectPostApply();
+
+   bindShapeAsset(Mesh);
+
+   updateShape();
+
+   // Flag the network mask to send the updates
+   // to the client object
+   setMaskBits(-1);
 }
 
 U32 MeshComponent::packUpdate(NetConnection *con, U32 mask, BitStream *stream)
@@ -302,7 +272,8 @@ U32 MeshComponent::packUpdate(NetConnection *con, U32 mask, BitStream *stream)
 
    if (stream->writeFlag(mask & ShapeMask))
    {
-      stream->writeString(mShapeName);
+      NetStringHandle shapeAssetIdStr = mMeshAsset.getAssetId();
+      con->packNetStringHandleU(stream, shapeAssetIdStr);
    }
 
    if (stream->writeFlag( mask & MaterialMask ))
@@ -329,9 +300,11 @@ void MeshComponent::unpackUpdate(NetConnection *con, BitStream *stream)
 
    if(stream->readFlag())
    {
-      mShapeName = stream->readSTString();
+      NetStringHandle shapeAssetIdStr = con->unpackNetStringHandleU(stream);
+      mMeshAssetId = StringTable->insert(shapeAssetIdStr.getString());
 
-      setMeshAsset(mShapeName);
+      bindShapeAsset(Mesh);
+
       updateShape();
    }
 
@@ -358,7 +331,7 @@ void MeshComponent::unpackUpdate(NetConnection *con, BitStream *stream)
 
 void MeshComponent::prepRenderImage( SceneRenderState *state )
 {
-   /*if (!mEnabled || !mOwner || !mShapeInstance)
+   if (!mEnabled || !mOwner || !mShapeInstance)
       return;
 
    Point3F cameraOffset;
@@ -406,7 +379,7 @@ void MeshComponent::prepRenderImage( SceneRenderState *state )
    mat.scale(objScale);
    GFX->setWorldMatrix(mat);
 
-   mShapeInstance->render(rdata);*/
+   mShapeInstance->render(rdata);
 }
 
 void MeshComponent::updateMaterials()

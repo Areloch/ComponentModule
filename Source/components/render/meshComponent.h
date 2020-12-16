@@ -72,9 +72,10 @@ protected:
       NextFreeMask = Parent::NextFreeMask << 2,
    };
 
-   StringTableEntry		mShapeName;
-   StringTableEntry		mShapeAsset;
-   TSShape*		         mShape;
+   DECLARE_SHAPEASSET(MeshComponent, Mesh);
+
+   Resource<TSShape> mShape;
+   TSShapeInstance* mShapeInstance;
    //Box3F						mShapeBounds;
    Point3F					mCenterOffset;
 
@@ -90,11 +91,6 @@ protected:
    Box3F mBounds;
    Point3F mScale;
    MatrixF mTransform;
-
-public:
-   StringTableEntry       mMeshAssetId;
-   AssetPtr<ShapeAsset>   mMeshAsset;
-   TSShapeInstance*       mShapeInstance;
 
 public:
    MeshComponent();
@@ -128,13 +124,7 @@ public:
 
    virtual void ownerTransformSet(MatrixF *mat);
 
-   static bool _setMesh(void *object, const char *index, const char *data);
-   static bool _setShape(void *object, const char *index, const char *data);
-   const char* _getShape(void *object, const char *data);
-
    static bool writeShape(void* obj, StringTableEntry pFieldName) { return static_cast<MeshComponent*>(obj)->mMeshAsset.notNull(); }
-
-   bool setMeshAsset(const char* assetName);
 
    virtual TSShape* getShape() { if (mMeshAsset)  return mMeshAsset->getShape(); else return NULL; }
    virtual TSShapeInstance* getShapeInstance() { return mShapeInstance; }

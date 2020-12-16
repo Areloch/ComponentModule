@@ -1,0 +1,8 @@
+<ComponentAsset
+    canSave="true"
+    canSaveDynamicFields="true"
+    AssetName="playerControllerComponentAsset"
+    componentClass="playerControllerComponent"
+    friendlyName="Player Controller Component"
+    componentType="Game"
+    description="Enables Player Controller on the entity." />

@@ -1,0 +1,8 @@
+<ComponentAsset
+    canSave="true"
+    canSaveDynamicFields="true"
+    AssetName="simplePhysicsComponentAsset"
+    componentClass="simplePhysicsComponent"
+    friendlyName="Simple Physics Component"
+    componentType="Game"
+    description="Enables Simple Physics on the entity." />

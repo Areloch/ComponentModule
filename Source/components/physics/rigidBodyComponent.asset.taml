@@ -1,0 +1,8 @@
+<ComponentAsset
+    canSave="true"
+    canSaveDynamicFields="true"
+    AssetName="rigidBodyComponentAsset"
+    componentClass="rigidBodyComponent"
+    friendlyName="Rigid Body Component"
+    componentType="Game"
+    description="Enables Rigid Body on the entity." />

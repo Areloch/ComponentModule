@@ -1,0 +1,8 @@
+<ComponentAsset
+    canSave="true"
+    canSaveDynamicFields="true"
+    AssetName="meshComponentAsset"
+    componentClass="meshComponent"
+    friendlyName="Mesh Render Component"
+    componentType="Game"
+    description="Enables Mesh Rendering on the entity." />
